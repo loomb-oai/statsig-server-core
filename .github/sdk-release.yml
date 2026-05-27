@@ -1,0 +1,32 @@
+repository:
+  source: loomb-oai/statsig-server-core
+  mirror:
+    enabled: false
+
+releases:
+  github:
+    target: source
+
+channels:
+  alpha:
+    source-branch: main
+    tag-pattern: "v{version}-alpha.{date}.{sequence}"
+
+  beta:
+    source-branch: main
+    tag-pattern: "v{version}-beta.{date}.{time}"
+    only-if-changed: true
+
+  rc:
+    source-branch: main
+    branch-pattern: "rc"
+    tag-pattern: "v{version}-rc.{iteration}"
+
+  production:
+    source-branch-pattern: "rc"
+    tag-pattern: "v{version}"
+    minimum-rc-bake-days: 7
+
+publishing:
+  mode: simulate
+  surface: source

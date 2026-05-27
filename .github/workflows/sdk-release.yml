@@ -1,0 +1,98 @@
+name: SDK Release
+run-name: ${{ format('{0} - SDK Release', github.event.inputs.operation || github.event_name) }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "Release operation to run immediately"
+        required: true
+        type: choice
+        options:
+          - REFRESH_PLAN
+          - PUB_ALPHA
+          - PUB_BETA
+          - CUT_RC
+          - PUB_RC
+          - CHERRY_PICK_RC
+          - CREATE_HOTFIX
+          - PROMOTE_RC
+      rc-ref:
+        description: "Required for PUB_RC and CHERRY_PICK_RC as an RC branch, or PROMOTE_RC as an RC tag, e.g. rc or v0.20.0-rc.4"
+        required: false
+        type: string
+      cherry-pick-refs:
+        description: "Required for CHERRY_PICK_RC. Commit SHAs/refs separated by spaces, commas, or newlines."
+        required: false
+        type: string
+      hotfix-base-tag:
+        description: "Required for CREATE_HOTFIX. Production tag to patch, e.g. v0.19.0."
+        required: false
+        type: string
+      hotfix-branch:
+        description: "Optional for CREATE_HOTFIX. Defaults to hotfix/<major>.<minor>.x."
+        required: false
+        type: string
+      hotfix-version:
+        description: "Optional for CREATE_HOTFIX. Defaults to the next patch version."
+        required: false
+        type: string
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  release:
+    types:
+      - published
+  schedule:
+    - cron: "0 10 * * 1"
+
+concurrency:
+  group: sdk-release-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: sdk-release-test
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.SDK_RELEASE_GH_CLIENT_ID }}
+          private-key: ${{ secrets.SDK_RELEASE_GH_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          permission-contents: write
+          permission-issues: write
+          permission-pull-requests: write
+          permission-workflows: write
+
+      - name: Checkout SDK release action
+        uses: actions/checkout@v4
+        with:
+          repository: loomb-oai/sdk-release-action
+          ref: main
+          token: ${{ steps.app-token.outputs.token }}
+          path: .sdk-release-action
+
+      - name: Run SDK release orchestration
+        id: sdk-release
+        uses: ./.sdk-release-action
+        with:
+          mode: ${{ github.event_name == 'schedule' && 'cut-rc' || 'auto' }}
+          github-token: ${{ steps.app-token.outputs.token }}
+          rc-ref: ${{ github.event.inputs['rc-ref'] || '' }}
+          cherry-pick-refs: ${{ github.event.inputs['cherry-pick-refs'] || '' }}
+          hotfix-base-tag: ${{ github.event.inputs['hotfix-base-tag'] || '' }}
+          hotfix-branch: ${{ github.event.inputs['hotfix-branch'] || '' }}
+          hotfix-version: ${{ github.event.inputs['hotfix-version'] || '' }}
+          release-tag: ${{ github.event.release.tag_name || '' }}
